@@ -152,6 +152,24 @@ async function createNewBudgetFileOnDrive(
 }
 
 /**
+ * Delete family budget file from Google Drive
+ */
+export async function deleteBudgetFileOnDrive(accessToken: string, fileId: string): Promise<void> {
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}`;
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok && response.status !== 404) {
+    const errorText = await response.text();
+    throw new Error(`Errore eliminazione file da Google Drive (${response.status}): ${errorText}`);
+  }
+}
+
+/**
  * Format CSV string for family budget transactions export
  */
 export function generateBudgetCSV(transactions: Transaction[]): string {

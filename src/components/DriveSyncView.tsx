@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   Clock,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import type { DriveSyncStatus, Transaction, FamilyBudgetData } from '../types';
 import { generateBudgetCSV, triggerDownload, DRIVE_FILE_NAME } from '../services/drive';
@@ -27,6 +28,7 @@ interface DriveSyncViewProps {
   onRestoreFromDriveRequest: () => void;
   onToggleAutoSync: () => void;
   onOpenDomainHelp?: () => void;
+  onOpenDeleteModal: () => void;
 }
 
 export function DriveSyncView({
@@ -39,6 +41,7 @@ export function DriveSyncView({
   onRestoreFromDriveRequest,
   onToggleAutoSync,
   onOpenDomainHelp,
+  onOpenDeleteModal,
 }: DriveSyncViewProps) {
   const [isExporting, setIsExporting] = useState(false);
 
@@ -299,6 +302,26 @@ export function DriveSyncView({
         <p className="leading-relaxed">
           I tuoi dati finanziari vengono salvati in forma privata esclusivamente nel tuo spazio Google Drive (<code>{DRIVE_FILE_NAME}</code>) e nella memoria locale del tuo dispositivo. L&apos;applicazione accede solo al file creato con il tuo consenso.
         </p>
+      </div>
+
+      {/* Danger Zone: Data Deletion with Security Code */}
+      <div className="bg-rose-50/80 dark:bg-rose-950/30 rounded-2xl p-5 border border-rose-200 dark:border-rose-900/60 shadow-xs space-y-3">
+        <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+          <Trash2 className="w-4 h-4 shrink-0" />
+          <h3 className="text-sm font-bold">Zona Pericolo: Eliminazione Dati</h3>
+        </div>
+        <p className="text-xs text-rose-800 dark:text-rose-300 leading-relaxed">
+          Cancella tutte le transazioni memorizzate e resetta l&apos;archivio. Per sicurezza ed evitare cancellazioni accidentali, l&apos;operazione richiede l&apos;inserimento del codice di sicurezza associato a <strong className="font-semibold text-rose-950 dark:text-rose-200">dreiu89@gmail.com</strong>.
+        </p>
+
+        <button
+          type="button"
+          onClick={onOpenDeleteModal}
+          className="w-full py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+        >
+          <Trash2 className="w-4 h-4" />
+          <span>Elimina tutti i dati (con codice di sicurezza)</span>
+        </button>
       </div>
     </div>
   );

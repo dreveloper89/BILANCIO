@@ -8,6 +8,7 @@ import type {
 import {
   loadLocalBudgetData,
   saveLocalBudgetData,
+  clearAllLocalBudgetData,
   getAllAvailableMonths,
   calculateMonthStats,
   calculateAverageStats,
@@ -26,7 +27,11 @@ import {
   findBudgetFileOnDrive,
   downloadBudgetFileFromDrive,
   saveBudgetFileToDrive,
+  deleteBudgetFileOnDrive,
+  triggerDownload,
+  DRIVE_FILE_NAME,
 } from './services/drive';
+import { Trash2 } from 'lucide-react';
 
 import { Header } from './components/Header';
 import { BottomNav, type NavTab } from './components/BottomNav';
@@ -38,6 +43,7 @@ import { TransactionModal } from './components/TransactionModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { MonthSelectorModal } from './components/MonthSelectorModal';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
+import { DataDeleteSecurityModal } from './components/DataDeleteSecurityModal';
 
 export default function App() {
   const [budgetData, setBudgetData] = useState<FamilyBudgetData>(() => loadLocalBudgetData());
@@ -46,6 +52,7 @@ export default function App() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isMonthSelectorOpen, setIsMonthSelectorOpen] = useState(false);
   const [isUnauthorizedDomainOpen, setIsUnauthorizedDomainOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Available months
@@ -366,6 +373,51 @@ export default function App() {
     });
   };
 
+  // Complete Data Deletion with Security Code ( dreiu89@gmail.com )
+  const handleConfirmDeleteData = async ({ deleteDriveFile }: { deleteDriveFile: boolean }) => {
+    // 1. Wipe local budget data
+    const cleared = clearAllLocalBudgetData();
+    setBudgetData(cleared);
+
+    // 2. If deleteDriveFile option was selected and drive is connected
+    if (deleteDriveFile && syncStatus.fileId) {
+      try {
+        const token = await getAccessToken();
+        if (token) {
+          await deleteBudgetFileOnDrive(token, syncStatus.fileId);
+          setSyncStatus((prev) => ({
+            ...prev,
+            fileId: null,
+            status: 'idle',
+            errorMessage: null,
+          }));
+          showToast('File di salvataggio eliminato anche da Google Drive');
+        }
+      } catch (err: any) {
+        console.error('Failed to delete Drive file:', err);
+        showToast(`Dati locali eliminati, errore rimozione Drive: ${err.message}`);
+        return;
+      }
+    } else if (syncStatus.fileId) {
+      // Overwrite file on Drive with empty data
+      try {
+        const token = await getAccessToken();
+        if (token) {
+          await saveBudgetFileToDrive(token, cleared, syncStatus.fileId);
+          setSyncStatus((prev) => ({
+            ...prev,
+            status: 'synced',
+            lastSyncedAt: new Date().toISOString(),
+          }));
+        }
+      } catch (err) {
+        console.warn('Failed to sync cleared state to Drive:', err);
+      }
+    }
+
+    showToast('Tutti i dati sono stati eliminati con successo');
+  };
+
   // Stats
   const currentMonthStats = useMemo(() => {
     return calculateMonthStats(budgetData.transactions, selectedMonth);
@@ -482,6 +534,7 @@ export default function App() {
               onSyncToDrive={handleManualSync}
               onRestoreFromDriveRequest={handleRestoreFromDriveRequest}
               onOpenDomainHelp={() => setIsUnauthorizedDomainOpen(true)}
+              onOpenDeleteModal={() => setIsDeleteModalOpen(true)}
               onToggleAutoSync={() => {
                 setSyncStatus((prev) => ({
                   ...prev,
@@ -495,6 +548,18 @@ export default function App() {
               }}
             />
           )}
+
+          {/* Pulsante di eliminazione dati in fondo con codice di sicurezza per dreiu89@gmail.com */}
+          <div className="pt-8 pb-3 text-center">
+            <button
+              type="button"
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors py-2 px-3.5 rounded-xl border border-slate-200/60 dark:border-slate-800/80 hover:border-rose-300 dark:hover:border-rose-900/60 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 cursor-pointer shadow-2xs"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+              <span>Elimina dati con codice di sicurezza (dreiu89@gmail.com)</span>
+            </button>
+          </div>
         </main>
 
         {/* Bottom Tab Bar with Action Button */}
@@ -549,6 +614,22 @@ export default function App() {
           isOpen={isUnauthorizedDomainOpen}
           onClose={() => setIsUnauthorizedDomainOpen(false)}
           onRetry={handleGoogleLogin}
+        />
+
+        {/* Data Delete Security Modal for dreiu89@gmail.com */}
+        <DataDeleteSecurityModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          onConfirmDelete={handleConfirmDeleteData}
+          isDriveConnected={Boolean(syncStatus.userEmail)}
+          driveFileName={DRIVE_FILE_NAME}
+          currentTransactionsCount={budgetData.transactions.length}
+          onExportBackupJSON={() => {
+            const jsonStr = JSON.stringify(budgetData, null, 2);
+            const filename = `backup_bilancio_${new Date().toISOString().split('T')[0]}.json`;
+            triggerDownload(jsonStr, filename, 'application/json');
+          }}
+          userEmail={syncStatus.userEmail || DEFAULT_USER_EMAIL}
         />
       </div>
     </div>

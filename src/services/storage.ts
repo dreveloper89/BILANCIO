@@ -968,6 +968,30 @@ export function saveLocalBudgetData(data: FamilyBudgetData): void {
   }
 }
 
+/**
+ * Wipe all transactions and reset data to a clean empty state
+ */
+export function clearAllLocalBudgetData(): FamilyBudgetData {
+  const emptyData: FamilyBudgetData = {
+    version: 5,
+    updatedAt: new Date().toISOString(),
+    targetMonthlySavings: 1000,
+    defaultUserEmail: DEFAULT_USER_EMAIL,
+    transactions: [],
+  };
+  saveLocalBudgetData(emptyData);
+  return emptyData;
+}
+
+/**
+ * Reset back to initial demo/seed data
+ */
+export function resetToSeedBudgetData(): FamilyBudgetData {
+  const defaultData = getDefaultBudgetData();
+  saveLocalBudgetData(defaultData);
+  return defaultData;
+}
+
 export const MONTH_NAMES_IT = [
   'Gennaio',
   'Febbraio',
