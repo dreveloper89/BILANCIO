@@ -37,6 +37,7 @@ import { DriveSyncView } from './components/DriveSyncView';
 import { TransactionModal } from './components/TransactionModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { MonthSelectorModal } from './components/MonthSelectorModal';
+import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 
 export default function App() {
   const [budgetData, setBudgetData] = useState<FamilyBudgetData>(() => loadLocalBudgetData());
@@ -44,6 +45,7 @@ export default function App() {
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isMonthSelectorOpen, setIsMonthSelectorOpen] = useState(false);
+  const [isUnauthorizedDomainOpen, setIsUnauthorizedDomainOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Available months
@@ -197,7 +199,17 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      showToast(`Accesso non completato: ${err.message}`);
+      const isUnauthorizedDomain =
+        err?.code === 'auth/unauthorized-domain' ||
+        err?.message?.includes('auth/unauthorized-domain') ||
+        err?.message?.includes('unauthorized-domain');
+
+      if (isUnauthorizedDomain) {
+        setIsUnauthorizedDomainOpen(true);
+        showToast('Dominio non autorizzato su Firebase: consulta le istruzioni a schermo');
+      } else {
+        showToast(`Accesso non completato: ${err.message || 'Errore di autenticazione'}`);
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -469,6 +481,7 @@ export default function App() {
               onLogout={handleGoogleLogout}
               onSyncToDrive={handleManualSync}
               onRestoreFromDriveRequest={handleRestoreFromDriveRequest}
+              onOpenDomainHelp={() => setIsUnauthorizedDomainOpen(true)}
               onToggleAutoSync={() => {
                 setSyncStatus((prev) => ({
                   ...prev,
@@ -529,6 +542,13 @@ export default function App() {
           isLoading={confirmConfig.isLoading}
           onConfirm={confirmConfig.onConfirm}
           onCancel={() => setConfirmConfig((c) => ({ ...c, isOpen: false }))}
+        />
+
+        {/* Firebase Unauthorized Domain Modal */}
+        <UnauthorizedDomainModal
+          isOpen={isUnauthorizedDomainOpen}
+          onClose={() => setIsUnauthorizedDomainOpen(false)}
+          onRetry={handleGoogleLogin}
         />
       </div>
     </div>

@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   LogOut,
   ShieldCheck,
+  ShieldAlert,
   Clock,
   Sparkles,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ interface DriveSyncViewProps {
   onSyncToDrive: () => Promise<void>;
   onRestoreFromDriveRequest: () => void;
   onToggleAutoSync: () => void;
+  onOpenDomainHelp?: () => void;
 }
 
 export function DriveSyncView({
@@ -36,6 +38,7 @@ export function DriveSyncView({
   onSyncToDrive,
   onRestoreFromDriveRequest,
   onToggleAutoSync,
+  onOpenDomainHelp,
 }: DriveSyncViewProps) {
   const [isExporting, setIsExporting] = useState(false);
 
@@ -123,6 +126,19 @@ export function DriveSyncView({
                 <span>Accedi con Google (dreiu89@gmail.com)</span>
               </button>
             </div>
+
+            {onOpenDomainHelp && (
+              <div className="pt-1 flex justify-center">
+                <button
+                  type="button"
+                  onClick={onOpenDomainHelp}
+                  className="inline-flex items-center gap-1.5 text-[11px] text-sky-300 hover:text-sky-200 hover:underline transition-colors cursor-pointer"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Errore <code>auth/unauthorized-domain</code>? Clicca qui per la guida</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           /* Logged In State */
