@@ -1,0 +1,6 @@
+{
+  "name": "Gestione Risparmio Famigliare",
+  "description": "Applicazione mobile per la gestione delle entrate, uscite, categorie di spesa, media mensile e sincronizzazione con Google Drive.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
