@@ -11,9 +11,10 @@ import {
   PiggyBank,
   ArrowUpRight,
   ArrowDownRight,
+  Tag,
 } from 'lucide-react';
-import type { MonthStats, Transaction, TransactionCategory, ExpenseCategory } from '../types';
-import { CATEGORIES_CONFIG } from '../types';
+import type { MonthStats, Transaction, TransactionCategory, ExpenseCategory, CategoryInfo } from '../types';
+import { CATEGORIES_CONFIG, getCategoryConfig } from '../types';
 import { formatCurrency, formatMonthKey } from '../services/storage';
 import { CategoryIcon } from './CategoryIcon';
 
@@ -23,9 +24,12 @@ interface MonthlyViewProps {
   onSelectMonth: (monthKey: string) => void;
   monthStats: MonthStats;
   transactions: Transaction[];
+  customCategories?: CategoryInfo[];
   onNewTransaction: () => void;
   onEditTransaction: (tx: Transaction) => void;
   onDeleteTransaction: (tx: Transaction) => void;
+  onSelectCategoryAnnual?: (category: TransactionCategory) => void;
+  onOpenCategoryManager?: () => void;
 }
 
 const PRIMARY_EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -54,9 +58,12 @@ export function MonthlyView({
   onSelectMonth,
   monthStats,
   transactions,
+  customCategories,
   onNewTransaction,
   onEditTransaction,
   onDeleteTransaction,
+  onSelectCategoryAnnual,
+  onOpenCategoryManager,
 }: MonthlyViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilterCategory, setSelectedFilterCategory] = useState<string>('all');
@@ -64,6 +71,13 @@ export function MonthlyView({
   const currentIdx = availableMonths.indexOf(selectedMonth);
   const hasNext = currentIdx > 0;
   const hasPrev = currentIdx < availableMonths.length - 1;
+
+  const expenseCategories = useMemo(() => {
+    const customs = (customCategories || [])
+      .filter((c) => c.type === 'expense')
+      .map((c) => c.id);
+    return [...PRIMARY_EXPENSE_CATEGORIES, ...customs];
+  }, [customCategories]);
 
   const handlePrevMonth = () => {
     if (hasPrev) {
@@ -174,14 +188,26 @@ export function MonthlyView({
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
             Suddivisione Spese del Mese
           </h3>
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            Totale: {formatCurrency(monthStats.totalExpense)}
-          </span>
+          <div className="flex items-center gap-2.5">
+            {onOpenCategoryManager && (
+              <button
+                type="button"
+                onClick={onOpenCategoryManager}
+                className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1"
+              >
+                <Tag className="w-3 h-3" />
+                <span>+ Categorie</span>
+              </button>
+            )}
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Totale: {formatCurrency(monthStats.totalExpense)}
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {PRIMARY_EXPENSE_CATEGORIES.map((catKey) => {
-            const conf = CATEGORIES_CONFIG[catKey];
+          {expenseCategories.map((catKey) => {
+            const conf = getCategoryConfig(catKey, customCategories);
             const amount = monthStats.expenseByCategory[catKey] || 0;
             const percent =
               monthStats.totalExpense > 0
@@ -210,16 +236,23 @@ export function MonthlyView({
                         customStyle?.bg ? 'bg-black/25 text-white' : `${conf.bgColor} ${conf.color}`
                       }`}
                     >
-                      <CategoryIcon category={catKey} className="w-4 h-4" />
+                      <CategoryIcon category={catKey} iconName={conf.icon} className="w-4 h-4" />
                     </div>
                     <div>
-                      <p
-                        className={`text-xs font-bold ${
-                          customStyle?.bg ? 'text-white' : 'text-slate-900 dark:text-slate-100'
-                        }`}
-                      >
-                        {conf.name}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p
+                          className={`text-xs font-bold ${
+                            customStyle?.bg ? 'text-white' : 'text-slate-900 dark:text-slate-100'
+                          }`}
+                        >
+                          {conf.name}
+                        </p>
+                        {conf.isCustom && (
+                          <span className="text-[8px] px-1 py-0.2 rounded-md bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-extrabold uppercase">
+                            Personalizzata
+                          </span>
+                        )}
+                      </div>
                       <p
                         style={customStyle ? { color: customStyle.descColor } : undefined}
                         className={`text-[10px] ${
@@ -247,6 +280,25 @@ export function MonthlyView({
                       {percent}% uscite
                     </p>
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-700/40">
+                  {onSelectCategoryAnnual && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectCategoryAnnual(catKey);
+                      }}
+                      className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 group"
+                    >
+                      <Calendar className="w-3 h-3" />
+                      <span>Totale annuo ›</span>
+                    </button>
+                  )}
+                  <span className="text-[10px] text-slate-400">
+                    {selectedFilterCategory === catKey ? 'Filtro attivo' : 'Filtra mese'}
+                  </span>
                 </div>
               </div>
             );
@@ -346,20 +398,7 @@ export function MonthlyView({
             >
               Assegno figli
             </button>
-            {[
-              'spesa_generica',
-              'bollette',
-              'condominio',
-              'carburante_pedaggi',
-              'scuola',
-              'corsi',
-              'vestiario_bambini',
-              'assicurazioni',
-              'bollo_auto',
-              'tagliando_auto',
-              'tari',
-              'extra',
-            ].map((cat) => (
+            {expenseCategories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedFilterCategory(cat)}
@@ -369,7 +408,7 @@ export function MonthlyView({
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                 }`}
               >
-                {CATEGORIES_CONFIG[cat as ExpenseCategory]?.name || cat}
+                {getCategoryConfig(cat, customCategories)?.name || cat}
               </button>
             ))}
           </div>

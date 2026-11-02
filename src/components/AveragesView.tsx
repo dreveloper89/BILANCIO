@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   TrendingUp,
   BarChart3,
@@ -14,16 +15,20 @@ import {
   Baby,
   RotateCcw,
   Info,
+  Tag,
 } from 'lucide-react';
-import type { AverageStats, MonthStats } from '../types';
-import { CATEGORIES_CONFIG, type ExpenseCategory } from '../types';
+import type { AverageStats, MonthStats, TransactionCategory, CategoryInfo } from '../types';
+import { CATEGORIES_CONFIG, getCategoryConfig, type ExpenseCategory } from '../types';
 import { formatCurrency } from '../services/storage';
 import { CategoryIcon } from './CategoryIcon';
 
 interface AveragesViewProps {
   averageStats: AverageStats;
   allMonthStats: MonthStats[];
+  customCategories?: CategoryInfo[];
   onSelectMonth: (monthKey: string) => void;
+  onSelectCategoryAnnual?: (category: TransactionCategory) => void;
+  onOpenCategoryManager?: () => void;
 }
 
 const PRIMARY_EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -41,7 +46,20 @@ const PRIMARY_EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'extra',
 ];
 
-export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: AveragesViewProps) {
+export function AveragesView({
+  averageStats,
+  allMonthStats,
+  customCategories,
+  onSelectMonth,
+  onSelectCategoryAnnual,
+  onOpenCategoryManager,
+}: AveragesViewProps) {
+  const expenseCategories = useMemo(() => {
+    const customs = (customCategories || [])
+      .filter((c) => c.type === 'expense')
+      .map((c) => c.id);
+    return [...PRIMARY_EXPENSE_CATEGORIES, ...customs];
+  }, [customCategories]);
   // Annual projection
   const estimatedAnnualSavings = averageStats.avgMonthlySavings * 12;
 
@@ -68,9 +86,19 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
     monthlyAveragePeriodic: 0,
   };
 
-  const periodicCategories = [
+  const periodicCategories: {
+    name: string;
+    category: ExpenseCategory;
+    total: number;
+    icon: any;
+    color: string;
+    bgColor: string;
+    borderColor: string;
+    description: string;
+  }[] = [
     {
       name: 'Bollo auto',
+      category: 'bollo_auto',
       total: periodicSummary.totalBolloAuto,
       icon: Shield,
       color: 'text-rose-600 dark:text-rose-400',
@@ -80,6 +108,7 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
     },
     {
       name: 'TARI (Rifiuti)',
+      category: 'tari',
       total: periodicSummary.totalTari,
       icon: Lightbulb,
       color: 'text-emerald-700 dark:text-emerald-400',
@@ -89,6 +118,7 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
     },
     {
       name: 'Assicurazione auto',
+      category: 'assicurazioni',
       total: periodicSummary.totalAssicurazioneAuto,
       icon: Shield,
       color: 'text-violet-600 dark:text-violet-400',
@@ -98,6 +128,7 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
     },
     {
       name: 'Tagliando auto',
+      category: 'tagliando_auto',
       total: periodicSummary.totalTagliandoAuto,
       icon: Calculator,
       color: 'text-blue-600 dark:text-blue-400',
@@ -113,9 +144,19 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
     2000
   );
 
-  const extraCategories = [
+  const extraCategories: {
+    name: string;
+    category: TransactionCategory;
+    total: number;
+    icon: any;
+    color: string;
+    bgColor: string;
+    borderColor: string;
+    description: string;
+  }[] = [
     {
       name: 'Bonus lavoro',
+      category: 'bonus_lavoro',
       total: extraSummary.totalBonusLavoro,
       icon: Award,
       color: 'text-teal-600 dark:text-teal-400',
@@ -125,6 +166,7 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
     },
     {
       name: 'Assegno figli',
+      category: 'assegno_figli',
       total: extraSummary.totalAssegnoFigli,
       icon: Baby,
       color: 'text-pink-600 dark:text-pink-400',
@@ -134,6 +176,7 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
     },
     {
       name: 'Regali',
+      category: 'regali',
       total: extraSummary.totalRegali,
       icon: Gift,
       color: 'text-rose-600 dark:text-rose-400',
@@ -253,7 +296,11 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
             return (
               <div
                 key={item.name}
-                className={`p-3 rounded-xl border ${item.bgColor} ${item.borderColor} flex items-center justify-between gap-2.5`}
+                onClick={() => onSelectCategoryAnnual?.(item.category)}
+                role="button"
+                tabIndex={0}
+                title={`Vedi totale annuale per ${item.name}`}
+                className={`p-3 rounded-xl border ${item.bgColor} ${item.borderColor} flex items-center justify-between gap-2.5 cursor-pointer hover:brightness-95 dark:hover:brightness-110 transition-all group shadow-2xs`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className={`p-2 rounded-xl bg-white dark:bg-slate-900 ${item.color} shadow-xs`}>
@@ -271,8 +318,8 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
                   <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block">
                     {formatCurrency(item.total)}
                   </span>
-                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                    {item.total > 0 ? `+${formatCurrency(monthlyShare)}/m` : '0 €'}
+                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 group-hover:underline flex items-center justify-end gap-0.5">
+                    {item.total > 0 ? `+${formatCurrency(monthlyShare)}/m ›` : '0 € ›'}
                   </span>
                 </div>
               </div>
@@ -337,7 +384,11 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
             return (
               <div
                 key={item.name}
-                className={`p-3 rounded-xl border ${item.bgColor} ${item.borderColor} flex items-center justify-between gap-2.5`}
+                onClick={() => onSelectCategoryAnnual?.(item.category)}
+                role="button"
+                tabIndex={0}
+                title={`Vedi totale annuale per ${item.name}`}
+                className={`p-3 rounded-xl border ${item.bgColor} ${item.borderColor} flex items-center justify-between gap-2.5 cursor-pointer hover:brightness-95 dark:hover:brightness-110 transition-all group shadow-2xs`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className={`p-2 rounded-xl bg-white dark:bg-slate-900 ${item.color} shadow-xs`}>
@@ -355,8 +406,8 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
                   <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block">
                     {formatCurrency(item.total)}
                   </span>
-                  <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400">
-                    {item.total > 0 ? `-${formatCurrency(monthlyShare)}/m` : '0 €'}
+                  <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400 group-hover:underline flex items-center justify-end gap-0.5">
+                    {item.total > 0 ? `-${formatCurrency(monthlyShare)}/m ›` : '0 € ›'}
                   </span>
                 </div>
               </div>
@@ -373,14 +424,24 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
               Media Mensile per Categoria di Spesa
             </h3>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Costo medio mensile calcolato sui mesi registrati da Gennaio 2026
+              Costo medio mensile calcolato sui mesi registrati • Tocca per il <strong>totale annuale</strong>
             </p>
           </div>
+          {onOpenCategoryManager && (
+            <button
+              type="button"
+              onClick={onOpenCategoryManager}
+              className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1 shrink-0"
+            >
+              <Tag className="w-3 h-3" />
+              <span>+ Categorie</span>
+            </button>
+          )}
         </div>
 
         <div className="space-y-2.5">
-          {PRIMARY_EXPENSE_CATEGORIES.map((catKey) => {
-            const conf = CATEGORIES_CONFIG[catKey];
+          {expenseCategories.map((catKey) => {
+            const conf = getCategoryConfig(catKey, customCategories);
             const avgAmount = averageStats.avgByCategory[catKey] || 0;
             const percentOfAvgExpense =
               averageStats.avgMonthlyExpense > 0
@@ -390,17 +451,28 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
             return (
               <div
                 key={catKey}
-                className="p-3 rounded-xl border border-slate-100 dark:border-slate-700/60 hover:bg-slate-100/60 dark:hover:bg-slate-800 transition-colors"
+                onClick={() => onSelectCategoryAnnual?.(catKey)}
+                role="button"
+                tabIndex={0}
+                title={`Vedi totale annuale per ${conf.name}`}
+                className="p-3 rounded-xl border border-slate-100 dark:border-slate-700/60 hover:bg-slate-100/70 dark:hover:bg-slate-800 hover:border-emerald-500/40 cursor-pointer transition-all group"
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2.5">
                     <div className={`p-2 rounded-xl ${conf.bgColor} ${conf.color}`}>
-                      <CategoryIcon category={catKey} className="w-4 h-4" />
+                      <CategoryIcon category={catKey} iconName={conf.icon} className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                        {conf.name}
-                      </h4>
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          {conf.name}
+                        </h4>
+                        {conf.isCustom && (
+                          <span className="text-[8px] px-1 py-0.2 rounded-md bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-extrabold uppercase">
+                            Personalizzata
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400">
                         {conf.description}
                       </p>
@@ -408,11 +480,11 @@ export function AveragesView({ averageStats, allMonthStats, onSelectMonth }: Ave
                   </div>
 
                   <div className="text-right">
-                    <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                    <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100 block">
                       {formatCurrency(avgAmount)}
                     </span>
-                    <span className="text-[10px] block font-semibold text-slate-500">
-                      {percentOfAvgExpense}% delle uscite
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:underline flex items-center justify-end gap-0.5">
+                      Totale annuo ›
                     </span>
                   </div>
                 </div>

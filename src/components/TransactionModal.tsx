@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Check,
@@ -9,15 +9,20 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Split,
-  Info,
+  Plus,
+  Sparkles,
 } from 'lucide-react';
 import {
   CATEGORIES_CONFIG,
+  DEFAULT_QUICK_SUGGESTIONS,
+  getMergedCategories,
+  getCategoryConfig,
   type Transaction,
   type TransactionType,
   type TransactionCategory,
   type ExpenseCategory,
   type IncomeCategory,
+  type CategoryInfo,
 } from '../types';
 import { CategoryIcon } from './CategoryIcon';
 
@@ -31,6 +36,11 @@ interface TransactionModalProps {
   ) => void;
   editingTransaction?: Transaction | null;
   defaultMonthKey?: string;
+  defaultCategory?: TransactionCategory | null;
+  customCategories?: CategoryInfo[];
+  customSuggestions?: Record<string, string[]>;
+  onOpenCategoryManager?: (tab?: 'new' | 'list' | 'suggestions', catId?: string) => void;
+  onAddSuggestion?: (catId: string, suggestion: string) => void;
 }
 
 const EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -58,34 +68,17 @@ const INCOME_CATEGORIES: IncomeCategory[] = [
   'altre_entrate',
 ];
 
-const QUICK_SUGGESTIONS: Record<TransactionCategory, string[]> = {
-  spesa_generica: ['Spesa Esselunga', 'Spesa Conad / Coop', 'Supermercato Discount', 'Macelleria / Frutta'],
-  bollette: ['Enel Energia Luce', 'Gas Riscaldamento', 'Acqua Acquedotto', 'Fibra Internet Casa'],
-  condominio: ['Rata condominio', 'Spese condominiali ordinarie', 'Conguaglio riscaldamento', 'Pulizia scale / ascensore'],
-  carburante_pedaggi: ['Pieno Carburante', 'Rifornimento Diesel', 'Benzina 95', 'Pedaggio Autostrada / Telepass', 'Ricarica EV / GPL'],
-  scuola: ['Mensa scolastica', 'Libri di testo', 'Materiale scolastico e quaderni', 'Gita scolastica'],
-  corsi: ['Corso nuoto / piscina', 'Corso sportivo bimbi', 'Corso inglese / lingue', 'Attività extrascolastiche'],
-  vestiario_bambini: ['Scarpe bambini', 'Abbigliamento cambio stagione', 'Giacca invernale bimbi', 'Tuta da ginnastica / sport'],
-  assicurazioni: ['Assicurazione Auto RCA', 'Polizza Casa / Terremoto', 'Assicurazione Vita / Infortuni'],
-  bollo_auto: ['Bollo auto annuale', 'Bollo seconda auto'],
-  tagliando_auto: ['Tagliando auto annuale', 'Revisione periodica auto', 'Cambio filtri e olio', 'Manutenzione veicolo'],
-  tari: ['TARI Tassa rifiuti acconto', 'TARI Tassa rifiuti saldo annuale', 'Tassa rifiuti comunali'],
-  extra: ['Regalo compleanno amici', 'Uscita speciale weekend', 'Spesa imprevista / riparazione', 'Varie extra'],
-  altre_uscite: ['Farmacia / Sanità', 'Cena / Ristorante', 'Spese casa / Brico', 'Svago e tempo libero'],
-  stipendio: ['Stipendio mensile Andrea', 'Stipendio partner', 'Busta paga (con 13esima/14esima/730)'],
-  bonus_lavoro: ['Premio di produzione', 'Bonus obiettivi aziendali', 'Incentivo straordinari', 'Welfare aziendale'],
-  assegno_figli: ['Assegno Unico INPS figli a carico', 'Assegno familiare INPS', 'Bonus figli'],
-  regali: ['Regalo compleanno', 'Regali di Natale da parenti', 'Regalo ricorrenza / festa', 'Donazione famigliare'],
-  rendita: ['Interessi conto deposito', 'Dividendi / Cedole', 'Affitto'],
-  altre_entrate: ['Vendita usato', 'Rimborso spese varie'],
-};
-
 export function TransactionModal({
   isOpen,
   onClose,
   onSave,
   editingTransaction,
   defaultMonthKey,
+  defaultCategory,
+  customCategories,
+  customSuggestions,
+  onOpenCategoryManager,
+  onAddSuggestion,
 }: TransactionModalProps) {
   const [type, setType] = useState<TransactionType>('expense');
   const [amountStr, setAmountStr] = useState<string>('');
@@ -96,6 +89,33 @@ export function TransactionModal({
   const [notes, setNotes] = useState<string>('');
   const [split12Months, setSplit12Months] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [isAddingInlineSuggestion, setIsAddingInlineSuggestion] = useState(false);
+  const [inlineSuggestionInput, setInlineSuggestionInput] = useState('');
+
+  const allCategoriesMap = useMemo(
+    () => getMergedCategories(customCategories),
+    [customCategories]
+  );
+
+  const currentCategoryList = useMemo(() => {
+    if (type === 'expense') {
+      const customs = (customCategories || [])
+        .filter((c) => c.type === 'expense')
+        .map((c) => c.id);
+      return [...EXPENSE_CATEGORIES, ...customs];
+    } else {
+      const customs = (customCategories || [])
+        .filter((c) => c.type === 'income')
+        .map((c) => c.id);
+      return [...INCOME_CATEGORIES, ...customs];
+    }
+  }, [type, customCategories]);
+
+  const suggestions = useMemo(() => {
+    const defs = DEFAULT_QUICK_SUGGESTIONS[category] || [];
+    const customs = customSuggestions?.[category] || [];
+    return Array.from(new Set([...defs, ...customs]));
+  }, [category, customSuggestions]);
 
   useEffect(() => {
     if (editingTransaction) {
@@ -109,9 +129,12 @@ export function TransactionModal({
       setSplit12Months(!!editingTransaction.isSplitOver12Months);
       setError('');
     } else {
-      setType('expense');
+      const initialCat = defaultCategory || 'spesa_generica';
+      const catConfig = getCategoryConfig(initialCat, customCategories);
+      const initialType = catConfig?.type || 'expense';
+      setType(initialType);
       setAmountStr('');
-      setCategory('spesa_generica');
+      setCategory(initialCat);
       setDescription('');
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
@@ -125,14 +148,20 @@ export function TransactionModal({
       setSplit12Months(false);
       setError('');
     }
-  }, [editingTransaction, isOpen, defaultMonthKey]);
+  }, [editingTransaction, isOpen, defaultMonthKey, defaultCategory, customCategories]);
 
   if (!isOpen) return null;
 
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
     if (newType === 'expense') {
-      if (!EXPENSE_CATEGORIES.includes(category as ExpenseCategory)) {
+      const expenseCats = (customCategories || [])
+        .filter((c) => c.type === 'expense')
+        .map((c) => c.id);
+      if (
+        !EXPENSE_CATEGORIES.includes(category as ExpenseCategory) &&
+        !expenseCats.includes(category)
+      ) {
         setCategory('spesa_generica');
       }
     } else {
@@ -182,9 +211,6 @@ export function TransactionModal({
     );
     onClose();
   };
-
-  const currentCategories = type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
-  const suggestions = QUICK_SUGGESTIONS[category] || [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
@@ -271,7 +297,16 @@ export function TransactionModal({
               <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Categoria {type === 'expense' ? 'di Spesa' : 'di Entrata'}
               </label>
-              {type === 'income' && (
+              {type === 'expense' ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenCategoryManager?.('new')}
+                  className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>+ Nuova Categoria</span>
+                </button>
+              ) : (
                 <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
                   Stipendio, bonus, assegno figli, regali
                 </span>
@@ -279,8 +314,8 @@ export function TransactionModal({
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {currentCategories.map((catKey) => {
-                const conf = CATEGORIES_CONFIG[catKey];
+              {currentCategoryList.map((catKey) => {
+                const conf = allCategoriesMap[catKey] || getCategoryConfig(catKey, customCategories);
                 const isSelected = category === catKey;
                 return (
                   <button
@@ -294,14 +329,15 @@ export function TransactionModal({
                             catKey
                           )) ||
                         (type === 'income' &&
-                          ['bonus_lavoro', 'assegno_figli', 'regali'].includes(catKey));
+                          ['bonus_lavoro', 'assegno_figli', 'regali'].includes(catKey)) ||
+                        conf.canSplit12Months;
                       if (shouldAutoSplit && !editingTransaction) {
                         setSplit12Months(true);
                       }
                       if (!description) {
-                        const sug = QUICK_SUGGESTIONS[catKey];
-                        if (sug && sug.length > 0) {
-                          setDescription(sug[0]);
+                        const catSugs = DEFAULT_QUICK_SUGGESTIONS[catKey] || customSuggestions?.[catKey];
+                        if (catSugs && catSugs.length > 0) {
+                          setDescription(catSugs[0]);
                         }
                       }
                     }}
@@ -312,13 +348,18 @@ export function TransactionModal({
                     }`}
                   >
                     <div className={`p-1.5 rounded-lg ${conf.bgColor} ${conf.color} shrink-0`}>
-                      <CategoryIcon category={catKey} className="w-4 h-4" />
+                      <CategoryIcon category={catKey} iconName={conf.icon} className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
                         {conf.name}
                       </p>
-                      {conf.canSplit12Months && (
+                      {conf.isCustom && (
+                        <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-extrabold uppercase block truncate">
+                          Personalizzata
+                        </span>
+                      )}
+                      {conf.canSplit12Months && !conf.isCustom && (
                         <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold block truncate">
                           ÷ 12 mesi
                         </span>
@@ -327,6 +368,17 @@ export function TransactionModal({
                   </button>
                 );
               })}
+
+              {type === 'expense' && (
+                <button
+                  type="button"
+                  onClick={() => onOpenCategoryManager?.('new')}
+                  className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/40 transition-colors font-bold text-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Crea Categoria</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -414,23 +466,104 @@ export function TransactionModal({
           )}
 
           {/* Quick Suggestions Pills */}
-          {suggestions.length > 0 && (
-            <div className="space-y-1">
-              <span className="text-[11px] text-slate-400 dark:text-slate-500">Suggeriti:</span>
-              <div className="flex flex-wrap gap-1.5">
-                {suggestions.map((sug) => (
-                  <button
-                    key={sug}
-                    type="button"
-                    onClick={() => setDescription(sug)}
-                    className="text-xs px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    {sug}
-                  </button>
-                ))}
-              </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-amber-500" />
+                Suggeriti per questa categoria:
+              </span>
+              <button
+                type="button"
+                onClick={() => onOpenCategoryManager?.('suggestions', category)}
+                className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
+              >
+                Gestisci suggeriti ›
+              </button>
             </div>
-          )}
+
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {suggestions.map((sug) => (
+                <button
+                  key={sug}
+                  type="button"
+                  onClick={() => setDescription(sug)}
+                  className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                    description === sug
+                      ? 'bg-emerald-600 text-white border-emerald-600 font-bold'
+                      : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {sug}
+                </button>
+              ))}
+
+              {/* Inline Add Suggestion Button */}
+              {isAddingInlineSuggestion ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    placeholder="Nuovo suggerito..."
+                    value={inlineSuggestionInput}
+                    onChange={(e) => setInlineSuggestionInput(e.target.value)}
+                    autoFocus
+                    className="text-xs px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-emerald-500 text-slate-900 dark:text-slate-100 w-32 focus:outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (inlineSuggestionInput.trim()) {
+                        onAddSuggestion?.(category, inlineSuggestionInput.trim());
+                        setDescription(inlineSuggestionInput.trim());
+                        setInlineSuggestionInput('');
+                      }
+                      setIsAddingInlineSuggestion(false);
+                    }}
+                    className="p-1 rounded-lg bg-emerald-600 text-white text-xs hover:bg-emerald-700"
+                    title="Conferma suggerito"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingInlineSuggestion(false);
+                      setInlineSuggestionInput('');
+                    }}
+                    className="p-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs"
+                    title="Annulla"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingInlineSuggestion(true)}
+                  className="text-xs px-2 py-1 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:text-emerald-600 hover:border-emerald-500 flex items-center gap-1 transition-colors"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>+ Suggerito</span>
+                </button>
+              )}
+            </div>
+
+            {/* If user typed a custom description that is not yet in suggestions, offer 1-click save */}
+            {description.trim().length > 2 &&
+              !suggestions.includes(description.trim()) && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAddSuggestion?.(category, description.trim());
+                    }}
+                    className="text-[11px] px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-semibold flex items-center gap-1 hover:bg-amber-100 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Salva &quot;{description.trim()}&quot; nei suggeriti veloci</span>
+                  </button>
+                </div>
+              )}
+          </div>
 
           {/* Description */}
           <div>

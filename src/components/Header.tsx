@@ -1,4 +1,4 @@
-import { Cloud, CheckCircle2, RefreshCw, AlertCircle, Calendar } from 'lucide-react';
+import { Cloud, CheckCircle2, RefreshCw, AlertCircle, Calendar, Tag } from 'lucide-react';
 import type { DriveSyncStatus } from '../types';
 
 interface HeaderProps {
@@ -7,6 +7,8 @@ interface HeaderProps {
   syncStatus: DriveSyncStatus;
   onSyncClick: () => void;
   onNewTransaction: () => void;
+  onOpenCategoryManager?: () => void;
+  customCategoriesCount?: number;
 }
 
 export function Header({
@@ -15,6 +17,8 @@ export function Header({
   syncStatus,
   onSyncClick,
   onNewTransaction,
+  onOpenCategoryManager,
+  customCategoriesCount = 0,
 }: HeaderProps) {
   const getSyncBadge = () => {
     if (syncStatus.status === 'syncing') {
@@ -71,11 +75,27 @@ export function Header({
           </div>
         </div>
 
-        {/* Center/Right Month Selector & Drive Badge */}
-        <div className="flex items-center gap-2">
+        {/* Center/Right Actions: Categories, Month Selector & Drive Badge */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {onOpenCategoryManager && (
+            <button
+              onClick={onOpenCategoryManager}
+              title="Personalizza categorie di spesa e suggeriti veloci"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700"
+            >
+              <Tag className="w-3.5 h-3.5 text-amber-500" />
+              <span className="hidden sm:inline">Categorie</span>
+              {customCategoriesCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] flex items-center justify-center font-bold">
+                  {customCategoriesCount}
+                </span>
+              )}
+            </button>
+          )}
+
           <button
             onClick={onOpenMonthSelector}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700"
           >
             <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>{currentMonthName}</span>

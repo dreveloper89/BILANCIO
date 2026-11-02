@@ -4,6 +4,7 @@ import type {
   Transaction,
   DriveSyncStatus,
   TransactionCategory,
+  CategoryInfo,
 } from './types';
 import {
   loadLocalBudgetData,
@@ -44,15 +45,23 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { MonthSelectorModal } from './components/MonthSelectorModal';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 import { DataDeleteSecurityModal } from './components/DataDeleteSecurityModal';
+import { CategoryAnnualModal } from './components/CategoryAnnualModal';
+import { CategoryManagerModal } from './components/CategoryManagerModal';
 
 export default function App() {
   const [budgetData, setBudgetData] = useState<FamilyBudgetData>(() => loadLocalBudgetData());
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [transactionModalCategory, setTransactionModalCategory] = useState<TransactionCategory | null>(null);
+  const [selectedCategoryAnnual, setSelectedCategoryAnnual] = useState<TransactionCategory | null>(null);
+  const [isCategoryAnnualModalOpen, setIsCategoryAnnualModalOpen] = useState(false);
   const [isMonthSelectorOpen, setIsMonthSelectorOpen] = useState(false);
   const [isUnauthorizedDomainOpen, setIsUnauthorizedDomainOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+  const [categoryManagerTab, setCategoryManagerTab] = useState<'new' | 'list' | 'suggestions'>('new');
+  const [categoryManagerCategory, setCategoryManagerCategory] = useState<string | undefined>(undefined);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Available months
@@ -373,6 +382,103 @@ export default function App() {
     });
   };
 
+  // Custom Category & Suggestion Handlers
+  const handleAddCustomCategory = (newCat: CategoryInfo) => {
+    let updated: FamilyBudgetData | null = null;
+    updateBudgetData((prev) => {
+      const existing = prev.customCategories || [];
+      const customCategories = [...existing.filter((c) => c.id !== newCat.id), newCat];
+      updated = {
+        ...prev,
+        customCategories,
+        updatedAt: new Date().toISOString(),
+      };
+      return updated;
+    });
+    showToast(`Categoria "${newCat.name}" creata con successo!`);
+    if (updated && syncStatus.autoSyncEnabled && syncStatus.userEmail) {
+      performDriveSync(updated);
+    }
+  };
+
+  const handleDeleteCustomCategory = (catId: string) => {
+    let updated: FamilyBudgetData | null = null;
+    updateBudgetData((prev) => {
+      const customCategories = (prev.customCategories || []).filter((c) => c.id !== catId);
+      // Reassign any transactions using this deleted category to 'altre_uscite'
+      const transactions = prev.transactions.map((tx) =>
+        tx.category === catId ? { ...tx, category: 'altre_uscite' as TransactionCategory } : tx
+      );
+      const customSuggestions = { ...(prev.customSuggestions || {}) };
+      delete customSuggestions[catId];
+      updated = {
+        ...prev,
+        customCategories,
+        transactions,
+        customSuggestions,
+        updatedAt: new Date().toISOString(),
+      };
+      return updated;
+    });
+    showToast('Categoria personalizzata eliminata');
+    if (updated && syncStatus.autoSyncEnabled && syncStatus.userEmail) {
+      performDriveSync(updated);
+    }
+  };
+
+  const handleAddSuggestion = (categoryId: string, suggestion: string) => {
+    let updated: FamilyBudgetData | null = null;
+    updateBudgetData((prev) => {
+      const currentCustoms = prev.customSuggestions?.[categoryId] || [];
+      if (currentCustoms.includes(suggestion)) return prev;
+      const updatedSuggestions = {
+        ...(prev.customSuggestions || {}),
+        [categoryId]: [...currentCustoms, suggestion],
+      };
+      updated = {
+        ...prev,
+        customSuggestions: updatedSuggestions,
+        updatedAt: new Date().toISOString(),
+      };
+      return updated;
+    });
+    showToast(`Suggerito "${suggestion}" salvato!`);
+    if (updated && syncStatus.autoSyncEnabled && syncStatus.userEmail) {
+      performDriveSync(updated);
+    }
+  };
+
+  const handleRemoveSuggestion = (categoryId: string, suggestion: string) => {
+    let updated: FamilyBudgetData | null = null;
+    updateBudgetData((prev) => {
+      const currentCustoms = prev.customSuggestions?.[categoryId] || [];
+      const updatedCustoms = currentCustoms.filter((s) => s !== suggestion);
+      const updatedSuggestions = {
+        ...(prev.customSuggestions || {}),
+        [categoryId]: updatedCustoms,
+      };
+      updated = {
+        ...prev,
+        customSuggestions: updatedSuggestions,
+        updatedAt: new Date().toISOString(),
+      };
+      return updated;
+    });
+    showToast('Suggerito rimosso');
+    if (updated && syncStatus.autoSyncEnabled && syncStatus.userEmail) {
+      performDriveSync(updated);
+    }
+  };
+
+  const handleOpenCategoryManager = (
+    tab: 'new' | 'list' | 'suggestions' = 'new',
+    catId?: string
+  ) => {
+    setCategoryManagerTab(tab);
+    setCategoryManagerCategory(catId);
+    setIsCategoryManagerOpen(true);
+  };
+
   // Complete Data Deletion with Security Code ( dreiu89@gmail.com )
   const handleConfirmDeleteData = async ({ deleteDriveFile }: { deleteDriveFile: boolean }) => {
     // 1. Wipe local budget data
@@ -457,6 +563,8 @@ export default function App() {
             setEditingTransaction(null);
             setIsTransactionModalOpen(true);
           }}
+          onOpenCategoryManager={() => handleOpenCategoryManager('list')}
+          customCategoriesCount={budgetData.customCategories?.length || 0}
         />
 
         {/* Toast Notification Banner */}
@@ -481,16 +589,23 @@ export default function App() {
               currentStats={currentMonthStats}
               averageStats={averageStats}
               recentTransactions={recentTransactions}
+              customCategories={budgetData.customCategories}
               onViewAllMonths={() => setCurrentTab('months')}
               onViewAverages={() => setCurrentTab('averages')}
               onNewTransaction={() => {
                 setEditingTransaction(null);
+                setTransactionModalCategory(null);
                 setIsTransactionModalOpen(true);
               }}
               onSelectTransaction={(tx) => {
                 setEditingTransaction(tx);
                 setIsTransactionModalOpen(true);
               }}
+              onSelectCategoryAnnual={(cat) => {
+                setSelectedCategoryAnnual(cat);
+                setIsCategoryAnnualModalOpen(true);
+              }}
+              onOpenCategoryManager={() => handleOpenCategoryManager('new')}
             />
           )}
 
@@ -501,8 +616,10 @@ export default function App() {
               onSelectMonth={setSelectedMonth}
               monthStats={currentMonthStats}
               transactions={budgetData.transactions}
+              customCategories={budgetData.customCategories}
               onNewTransaction={() => {
                 setEditingTransaction(null);
+                setTransactionModalCategory(null);
                 setIsTransactionModalOpen(true);
               }}
               onEditTransaction={(tx) => {
@@ -510,6 +627,11 @@ export default function App() {
                 setIsTransactionModalOpen(true);
               }}
               onDeleteTransaction={handleDeleteTransaction}
+              onSelectCategoryAnnual={(cat) => {
+                setSelectedCategoryAnnual(cat);
+                setIsCategoryAnnualModalOpen(true);
+              }}
+              onOpenCategoryManager={() => handleOpenCategoryManager('new')}
             />
           )}
 
@@ -517,10 +639,16 @@ export default function App() {
             <AveragesView
               averageStats={averageStats}
               allMonthStats={allMonthStats}
+              customCategories={budgetData.customCategories}
               onSelectMonth={(mKey) => {
                 setSelectedMonth(mKey);
                 setCurrentTab('months');
               }}
+              onSelectCategoryAnnual={(cat) => {
+                setSelectedCategoryAnnual(cat);
+                setIsCategoryAnnualModalOpen(true);
+              }}
+              onOpenCategoryManager={() => handleOpenCategoryManager('new')}
             />
           )}
 
@@ -578,10 +706,57 @@ export default function App() {
           onClose={() => {
             setIsTransactionModalOpen(false);
             setEditingTransaction(null);
+            setTransactionModalCategory(null);
           }}
           onSave={handleSaveTransaction}
           editingTransaction={editingTransaction}
           defaultMonthKey={selectedMonth}
+          defaultCategory={transactionModalCategory}
+          customCategories={budgetData.customCategories}
+          customSuggestions={budgetData.customSuggestions}
+          onOpenCategoryManager={handleOpenCategoryManager}
+          onAddSuggestion={handleAddSuggestion}
+        />
+
+        {/* Category Annual Overview Modal */}
+        <CategoryAnnualModal
+          isOpen={isCategoryAnnualModalOpen}
+          onClose={() => {
+            setIsCategoryAnnualModalOpen(false);
+            setSelectedCategoryAnnual(null);
+          }}
+          category={selectedCategoryAnnual}
+          transactions={budgetData.transactions}
+          initialYear={parseInt(selectedMonth.split('-')[0], 10) || 2026}
+          customCategories={budgetData.customCategories}
+          onSelectTransaction={(tx) => {
+            setEditingTransaction(tx);
+            setIsTransactionModalOpen(true);
+          }}
+          onNewTransactionForCategory={(cat) => {
+            setEditingTransaction(null);
+            setTransactionModalCategory(cat);
+            setIsTransactionModalOpen(true);
+          }}
+          onGoToMonth={(mKey) => {
+            setSelectedMonth(mKey);
+            setCurrentTab('months');
+          }}
+        />
+
+        {/* Custom Category & Suggestion Manager Modal */}
+        <CategoryManagerModal
+          isOpen={isCategoryManagerOpen}
+          onClose={() => setIsCategoryManagerOpen(false)}
+          customCategories={budgetData.customCategories || []}
+          customSuggestions={budgetData.customSuggestions || {}}
+          transactions={budgetData.transactions}
+          onAddCategory={handleAddCustomCategory}
+          onDeleteCategory={handleDeleteCustomCategory}
+          onAddSuggestion={handleAddSuggestion}
+          onRemoveSuggestion={handleRemoveSuggestion}
+          initialTab={categoryManagerTab}
+          initialSelectedCategoryId={categoryManagerCategory}
         />
 
         {/* Month Selector Modal */}

@@ -893,6 +893,8 @@ export function getDefaultBudgetData(): FamilyBudgetData {
     targetMonthlySavings: 1000,
     defaultUserEmail: DEFAULT_USER_EMAIL,
     transactions: [...INITIAL_SEED_TRANSACTIONS, ...generatePeriodicExpenseTransactions()],
+    customCategories: [],
+    customSuggestions: {},
   };
 }
 
@@ -944,6 +946,8 @@ export function loadLocalBudgetData(): FamilyBudgetData {
           targetMonthlySavings: parsed.targetMonthlySavings || 1000,
           defaultUserEmail: parsed.defaultUserEmail || DEFAULT_USER_EMAIL,
           transactions: migratedTransactions,
+          customCategories: Array.isArray(parsed.customCategories) ? parsed.customCategories : [],
+          customSuggestions: parsed.customSuggestions || {},
         };
         saveLocalBudgetData(migrated);
         return migrated;
@@ -951,6 +955,12 @@ export function loadLocalBudgetData(): FamilyBudgetData {
       const initial = getDefaultBudgetData();
       saveLocalBudgetData(initial);
       return initial;
+    }
+    if (!Array.isArray(parsed.customCategories)) {
+      parsed.customCategories = [];
+    }
+    if (!parsed.customSuggestions || typeof parsed.customSuggestions !== 'object') {
+      parsed.customSuggestions = {};
     }
     return parsed;
   } catch (err) {
@@ -1152,9 +1162,9 @@ export function calculateMonthStats(transactions: Transaction[], monthKey: strin
 
   const monthTx = transactions.filter((t) => t.date.startsWith(monthKey));
 
-  const expenseByCategory: Record<ExpenseCategory, number> = getEmptyExpenseByCategory();
+  const expenseByCategory: Record<string, number> = getEmptyExpenseByCategory();
 
-  const incomeByCategory: Record<IncomeCategory, number> = {
+  const incomeByCategory: Record<string, number> = {
     stipendio: 0,
     bonus_lavoro: 0,
     assegno_figli: 0,
@@ -1169,21 +1179,12 @@ export function calculateMonthStats(transactions: Transaction[], monthKey: strin
   monthTx.forEach((tx) => {
     if (tx.type === 'income') {
       totalIncome += tx.amount;
-      const cat = tx.category as IncomeCategory;
-      if (incomeByCategory[cat] !== undefined) {
-        incomeByCategory[cat] += tx.amount;
-      } else {
-        incomeByCategory.altre_entrate += tx.amount;
-      }
+      const cat = tx.category as string;
+      incomeByCategory[cat] = (incomeByCategory[cat] || 0) + tx.amount;
     } else {
       totalExpense += tx.amount;
       const rawCat = tx.category === ('benzina' as any) ? 'carburante_pedaggi' : tx.category;
-      const cat = rawCat as ExpenseCategory;
-      if (expenseByCategory[cat] !== undefined) {
-        expenseByCategory[cat] += tx.amount;
-      } else {
-        expenseByCategory.altre_uscite += tx.amount;
-      }
+      expenseByCategory[rawCat] = (expenseByCategory[rawCat] || 0) + tx.amount;
     }
   });
 
@@ -1251,7 +1252,7 @@ export function calculateAverageStats(transactions: Transaction[]): AverageStats
   let sumSavings = 0;
   let totalCumulativeSavings = 0;
 
-  const sumByCategory: Record<ExpenseCategory, number> = getEmptyExpenseByCategory();
+  const sumByCategory: Record<string, number> = getEmptyExpenseByCategory();
 
   let maxExpense = -1;
   let maxExpenseMonth: { monthName: string; amount: number } | undefined;
@@ -1264,8 +1265,8 @@ export function calculateAverageStats(transactions: Transaction[]): AverageStats
     sumSavings += m.netSavings;
     totalCumulativeSavings += m.netSavings;
 
-    (Object.keys(m.expenseByCategory) as ExpenseCategory[]).forEach((cat) => {
-      sumByCategory[cat] += m.expenseByCategory[cat] || 0;
+    Object.keys(m.expenseByCategory).forEach((cat) => {
+      sumByCategory[cat] = (sumByCategory[cat] || 0) + (m.expenseByCategory[cat] || 0);
     });
 
     if (m.totalExpense > maxExpense) {
@@ -1348,8 +1349,8 @@ export function calculateAverageStats(transactions: Transaction[]): AverageStats
   const avgMonthlySavings = Math.round((sumSavings / count) * 100) / 100;
   const avgSavingsRate = avgMonthlyIncome > 0 ? Math.round((avgMonthlySavings / avgMonthlyIncome) * 100) : 0;
 
-  const avgByCategory: Record<ExpenseCategory, number> = getEmptyExpenseByCategory();
-  (Object.keys(sumByCategory) as ExpenseCategory[]).forEach((cat) => {
+  const avgByCategory: Record<string, number> = getEmptyExpenseByCategory();
+  Object.keys(sumByCategory).forEach((cat) => {
     avgByCategory[cat] = Math.round((sumByCategory[cat] / count) * 100) / 100;
   });
 

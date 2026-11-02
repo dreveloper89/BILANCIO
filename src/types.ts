@@ -23,10 +23,10 @@ export type IncomeCategory =
   | 'rendita'
   | 'altre_entrate';
 
-export type TransactionCategory = ExpenseCategory | IncomeCategory;
+export type TransactionCategory = ExpenseCategory | IncomeCategory | string;
 
 export interface CategoryInfo {
-  id: TransactionCategory;
+  id: string;
   name: string;
   icon: string;
   color: string;
@@ -35,9 +35,10 @@ export interface CategoryInfo {
   description: string;
   type: TransactionType;
   canSplit12Months?: boolean;
+  isCustom?: boolean;
 }
 
-export const CATEGORIES_CONFIG: Record<TransactionCategory, CategoryInfo> = {
+export const CATEGORIES_CONFIG: Record<string, CategoryInfo> = {
   spesa_generica: {
     id: 'spesa_generica',
     name: 'Spesa generica',
@@ -139,7 +140,7 @@ export const CATEGORIES_CONFIG: Record<TransactionCategory, CategoryInfo> = {
     color: 'text-indigo-600 dark:text-indigo-400',
     bgColor: 'bg-indigo-500/10 dark:bg-indigo-500/20',
     borderColor: 'border-indigo-500/30',
-    description: 'Sport, corsi pomeridiani, lezioni e attività formative',
+    description: 'Danza, sport, piscina, corsi pomeridiani e lezioni formative',
     type: 'expense',
   },
   vestiario_bambini: {
@@ -260,6 +261,8 @@ export interface FamilyBudgetData {
   targetMonthlySavings: number;
   defaultUserEmail: string;
   transactions: Transaction[];
+  customCategories?: CategoryInfo[];
+  customSuggestions?: Record<string, string[]>;
 }
 
 export interface ExtraIncomesSummary {
@@ -288,8 +291,8 @@ export interface MonthStats {
   totalExpense: number;
   netSavings: number;
   savingsRate: number; // percentage (0-100)
-  expenseByCategory: Record<ExpenseCategory, number>;
-  incomeByCategory: Record<IncomeCategory, number>;
+  expenseByCategory: Record<string, number>;
+  incomeByCategory: Record<string, number>;
   transactionsCount: number;
 }
 
@@ -299,7 +302,7 @@ export interface AverageStats {
   avgMonthlyExpense: number;
   avgMonthlySavings: number;
   avgSavingsRate: number;
-  avgByCategory: Record<ExpenseCategory, number>;
+  avgByCategory: Record<string, number>;
   totalCumulativeSavings: number;
   highestExpenseMonth?: { monthName: string; amount: number };
   highestSavingsMonth?: { monthName: string; amount: number };
@@ -317,4 +320,97 @@ export interface DriveSyncStatus {
   userPhoto?: string | null;
   errorMessage?: string | null;
   autoSyncEnabled: boolean;
+}
+
+export const DEFAULT_QUICK_SUGGESTIONS: Record<string, string[]> = {
+  spesa_generica: ['Spesa Esselunga', 'Spesa Conad / Coop', 'Supermercato Discount', 'Macelleria / Frutta'],
+  bollette: ['Enel Energia Luce', 'Gas Riscaldamento', 'Acqua Acquedotto', 'Fibra Internet Casa'],
+  condominio: ['Rata condominio', 'Spese condominiali ordinarie', 'Conguaglio riscaldamento', 'Pulizia scale / ascensore'],
+  carburante_pedaggi: ['Pieno Carburante', 'Rifornimento Diesel', 'Benzina 95', 'Pedaggio Autostrada / Telepass', 'Ricarica EV / GPL'],
+  scuola: ['Mensa scolastica', 'Libri di testo', 'Materiale scolastico e quaderni', 'Gita scolastica'],
+  corsi: ['Danza', 'Corso danza', 'Corso danza classica / moderna', 'Corso nuoto / piscina', 'Corso sportivo bimbi', 'Corso inglese / lingue', 'Attività extrascolastiche'],
+  vestiario_bambini: ['Scarpe bambini', 'Abbigliamento cambio stagione', 'Giacca invernale bimbi', 'Tuta da ginnastica / sport'],
+  assicurazioni: ['Assicurazione Auto RCA', 'Polizza Casa / Terremoto', 'Assicurazione Vita / Infortuni'],
+  bollo_auto: ['Bollo auto annuale', 'Bollo seconda auto'],
+  tagliando_auto: ['Tagliando auto annuale', 'Revisione periodica auto', 'Cambio filtri e olio', 'Manutenzione veicolo'],
+  tari: ['TARI Tassa rifiuti acconto', 'TARI Tassa rifiuti saldo annuale', 'Tassa rifiuti comunali'],
+  extra: ['Regalo compleanno amici', 'Uscita speciale weekend', 'Spesa imprevista / riparazione', 'Varie extra'],
+  altre_uscite: ['Farmacia / Sanità', 'Cena / Ristorante', 'Spese casa / Brico', 'Svago e tempo libero'],
+  stipendio: ['Stipendio mensile Andrea', 'Stipendio partner', 'Busta paga (con 13esima/14esima/730)'],
+  bonus_lavoro: ['Premio di produzione', 'Bonus obiettivi aziendali', 'Incentivo straordinari', 'Welfare aziendale'],
+  assegno_figli: ['Assegno Unico INPS figli a carico', 'Assegno familiare INPS', 'Bonus figli'],
+  regali: ['Regalo compleanno', 'Regali di Natale da parenti', 'Regalo ricorrenza / festa', 'Donazione famigliare'],
+  rendita: ['Interessi conto deposito', 'Dividendi / Cedole', 'Affitto'],
+  altre_entrate: ['Vendita usato', 'Rimborso spese varie'],
+};
+
+/**
+ * Returns all categories merged (built-in + user-defined custom categories)
+ */
+export function getMergedCategories(customCategories?: CategoryInfo[]): Record<string, CategoryInfo> {
+  const merged: Record<string, CategoryInfo> = { ...CATEGORIES_CONFIG };
+  if (customCategories && Array.isArray(customCategories)) {
+    customCategories.forEach((cat) => {
+      if (cat && cat.id) {
+        merged[cat.id] = { ...cat, isCustom: true };
+      }
+    });
+  }
+  return merged;
+}
+
+/**
+ * Get category configuration safely with fallback
+ */
+export function getCategoryConfig(
+  categoryId: string,
+  customCategories?: CategoryInfo[]
+): CategoryInfo {
+  const all = getMergedCategories(customCategories);
+  if (all[categoryId]) {
+    return all[categoryId];
+  }
+  // Safe fallback
+  return {
+    id: categoryId,
+    name: categoryId.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
+    icon: 'Tag',
+    color: 'text-slate-600 dark:text-slate-400',
+    bgColor: 'bg-slate-500/10 dark:bg-slate-500/20',
+    borderColor: 'border-slate-500/30',
+    description: 'Categoria personalizzata',
+    type: 'expense',
+    isCustom: true,
+  };
+}
+
+/**
+ * Returns merged quick suggestions for all categories
+ */
+export function getMergedSuggestions(
+  customSuggestions?: Record<string, string[]>
+): Record<string, string[]> {
+  const merged: Record<string, string[]> = {};
+  // Copy defaults
+  Object.keys(DEFAULT_QUICK_SUGGESTIONS).forEach((cat) => {
+    merged[cat] = [...DEFAULT_QUICK_SUGGESTIONS[cat]];
+  });
+  // Add/override customs
+  if (customSuggestions) {
+    Object.keys(customSuggestions).forEach((cat) => {
+      const customs = customSuggestions[cat] || [];
+      if (!merged[cat]) {
+        merged[cat] = [...customs];
+      } else {
+        // Unique merge
+        const existing = new Set(merged[cat]);
+        customs.forEach((item) => {
+          if (!existing.has(item)) {
+            merged[cat].push(item);
+          }
+        });
+      }
+    });
+  }
+  return merged;
 }

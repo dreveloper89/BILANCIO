@@ -1,3 +1,4 @@
+import React, { useMemo } from 'react';
 import {
   TrendingUp,
   ArrowDownRight,
@@ -9,9 +10,10 @@ import {
   Scale,
   Calendar,
   Split,
+  Tag,
 } from 'lucide-react';
-import type { MonthStats, AverageStats, Transaction } from '../types';
-import { CATEGORIES_CONFIG, type ExpenseCategory } from '../types';
+import type { MonthStats, AverageStats, Transaction, TransactionCategory, CategoryInfo } from '../types';
+import { CATEGORIES_CONFIG, getCategoryConfig, type ExpenseCategory } from '../types';
 import { formatCurrency } from '../services/storage';
 import { CategoryIcon } from './CategoryIcon';
 
@@ -19,10 +21,13 @@ interface DashboardViewProps {
   currentStats: MonthStats;
   averageStats: AverageStats;
   recentTransactions: Transaction[];
+  customCategories?: CategoryInfo[];
   onViewAllMonths: () => void;
   onViewAverages: () => void;
   onNewTransaction: () => void;
   onSelectTransaction: (tx: Transaction) => void;
+  onSelectCategoryAnnual: (category: TransactionCategory) => void;
+  onOpenCategoryManager?: () => void;
 }
 
 const PRIMARY_EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -49,11 +54,21 @@ export function DashboardView({
   currentStats,
   averageStats,
   recentTransactions,
+  customCategories,
   onViewAllMonths,
   onViewAverages,
   onNewTransaction,
   onSelectTransaction,
+  onSelectCategoryAnnual,
+  onOpenCategoryManager,
 }: DashboardViewProps) {
+  const expenseCategories = useMemo(() => {
+    const customs = (customCategories || [])
+      .filter((c) => c.type === 'expense')
+      .map((c) => c.id);
+    return [...PRIMARY_EXPENSE_CATEGORIES, ...customs];
+  }, [customCategories]);
+
   // Compare current month expenses with historical average
   const expenseDiffFromAvg = currentStats.totalExpense - averageStats.avgMonthlyExpense;
   const isSpendingBelowAvg = expenseDiffFromAvg <= 0;
@@ -215,24 +230,41 @@ export function DashboardView({
       <div className="bg-white dark:bg-slate-800/80 rounded-2xl p-4 border border-slate-200 dark:border-slate-700/80 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-              Suddivisione Spese del Mese
-            </h3>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                Suddivisione Spese del Mese
+              </h3>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                Tocca una voce per visualizzare il <strong>totale annuale</strong>
+              </p>
+            </div>
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">
               {currentStats.monthName}
             </span>
           </div>
-          <button
-            onClick={onViewAllMonths}
-            className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
-          >
-            Dettagli
-          </button>
+          <div className="flex items-center gap-2.5">
+            {onOpenCategoryManager && (
+              <button
+                type="button"
+                onClick={onOpenCategoryManager}
+                className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1"
+              >
+                <Tag className="w-3 h-3" />
+                <span>+ Categorie</span>
+              </button>
+            )}
+            <button
+              onClick={onViewAllMonths}
+              className="text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 font-semibold hover:underline"
+            >
+              Dettagli
+            </button>
+          </div>
         </div>
 
         <div className="space-y-2.5">
-          {PRIMARY_EXPENSE_CATEGORIES.map((catKey) => {
-            const conf = CATEGORIES_CONFIG[catKey];
+          {expenseCategories.map((catKey) => {
+            const conf = getCategoryConfig(catKey, customCategories);
             const amount = currentStats.expenseByCategory[catKey] || 0;
             const percent =
               currentStats.totalExpense > 0
@@ -244,22 +276,33 @@ export function DashboardView({
             return (
               <div
                 key={catKey}
+                onClick={() => onSelectCategoryAnnual(catKey)}
+                role="button"
+                tabIndex={0}
+                title={`Vedi totale annuale per ${conf.name}`}
                 style={customStyle?.bg ? { backgroundColor: customStyle.bg } : undefined}
-                className="p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/50 hover:bg-slate-100/60 dark:hover:bg-slate-800 transition-colors"
+                className="p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/50 hover:bg-slate-100/70 dark:hover:bg-slate-800 hover:border-emerald-500/40 cursor-pointer transition-all group"
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
                     <div className={`p-1.5 rounded-lg ${conf.bgColor} ${conf.color}`}>
-                      <CategoryIcon category={catKey} className="w-4 h-4" />
+                      <CategoryIcon category={catKey} iconName={conf.icon} className="w-4 h-4" />
                     </div>
                     <div>
-                      <span
-                        className={`text-xs font-bold ${
-                          customStyle?.bg ? 'text-white' : 'text-slate-900 dark:text-slate-100'
-                        }`}
-                      >
-                        {conf.name}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`text-xs font-bold ${
+                            customStyle?.bg ? 'text-white' : 'text-slate-900 dark:text-slate-100'
+                          }`}
+                        >
+                          {conf.name}
+                        </span>
+                        {conf.isCustom && (
+                          <span className="text-[8px] px-1 py-0.2 rounded-md bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-extrabold uppercase">
+                            Personalizzata
+                          </span>
+                        )}
+                      </div>
                       <span
                         style={
                           customStyle?.percentColor
@@ -277,13 +320,18 @@ export function DashboardView({
                       </span>
                     </div>
                   </div>
-                  <span
-                    className={`text-sm font-extrabold ${
-                      customStyle?.bg ? 'text-white' : 'text-slate-800 dark:text-slate-200'
-                    }`}
-                  >
-                    {formatCurrency(amount)}
-                  </span>
+                  <div className="text-right">
+                    <span
+                      className={`text-sm font-extrabold ${
+                        customStyle?.bg ? 'text-white' : 'text-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      {formatCurrency(amount)}
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:underline flex items-center justify-end gap-0.5">
+                      Totale annuo ›
+                    </span>
+                  </div>
                 </div>
 
                 {/* Progress Bar */}
@@ -323,7 +371,13 @@ export function DashboardView({
 
           {/* Altre uscite se presenti */}
           {(currentStats.expenseByCategory.altre_uscite || 0) > 0 && (
-            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-100 dark:border-slate-700/50">
+            <div
+              onClick={() => onSelectCategoryAnnual('altre_uscite')}
+              role="button"
+              tabIndex={0}
+              title="Vedi totale annuale per Altre uscite"
+              className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-100 dark:border-slate-700/50 hover:bg-slate-100/70 dark:hover:bg-slate-800 hover:border-emerald-500/40 cursor-pointer transition-all group"
+            >
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
@@ -333,9 +387,14 @@ export function DashboardView({
                     Altre uscite
                   </span>
                 </div>
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                  {formatCurrency(currentStats.expenseByCategory.altre_uscite)}
-                </span>
+                <div className="text-right">
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300 block">
+                    {formatCurrency(currentStats.expenseByCategory.altre_uscite)}
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:underline flex items-center justify-end gap-0.5">
+                    Totale annuo ›
+                  </span>
+                </div>
               </div>
             </div>
           )}
